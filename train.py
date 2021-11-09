@@ -67,7 +67,7 @@ def train(args):
     nbeta1 = 0.5
     use_cuda = True
     multi_gpu = True
-    dataloader_workers = 8
+    dataloader_workers = args.dataloader_workers
     current_iteration = 0
     save_interval = args.save_interval
     saved_model_folder, saved_image_folder = get_dir(args)
@@ -160,7 +160,9 @@ def train(args):
         for p, avg_p in zip(netG.parameters(), avg_param_G):
             avg_p.mul_(0.999).add_(0.001 * p.data)
 
-        if iteration % 100 == 0:
+        if iteration % save_interval == 0:
+            wandb.log({'loss_d': err_dr})
+            wandb.log({'loss_g': -err_g.item()})
             print("GAN: loss d: %.5f    loss g: %.5f"%(err_dr, -err_g.item()))
 
         if iteration % (save_interval*10) == 0:
@@ -198,6 +200,7 @@ def parse():
     parser.add_argument('--cuda', type=int, default=0, help='index of gpu to use')
     parser.add_argument('--name', type=str, default='test1', help='experiment name')
     parser.add_argument('--iter', type=int, default=50000, help='number of iterations')
+    parser.add_argument('--dataloader_workers', type=int, default=4, help='number of data loader workers.')
     parser.add_argument('--save_interval', type=int, default=100, help='Interval to save images.')
     parser.add_argument('--start_iter', type=int, default=0, help='the iteration to start training')
     parser.add_argument('--batch_size', type=int, default=8, help='mini batch number of images')
