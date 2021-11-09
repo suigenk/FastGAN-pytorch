@@ -8,6 +8,7 @@ from torchvision import utils as vutils
 
 import argparse
 import random
+import wandb
 from tqdm import tqdm
 
 from models import weights_init, Discriminator, Generator
@@ -183,7 +184,7 @@ def train(args):
                         'opt_g': optimizerG.state_dict(),
                         'opt_d': optimizerD.state_dict()}, saved_model_folder+'/all_%d.pth'%iteration)
 
-if __name__ == "__main__":
+def parse():
     parser = argparse.ArgumentParser(description='region gan')
 
     parser.add_argument('--path', type=str, default='../lmdbs/art_landscape_1k', help='path of resource dataset, should be a folder that has one or many sub image folders inside')
@@ -197,6 +198,15 @@ if __name__ == "__main__":
 
 
     args = parser.parse_args()
-    print(args)
+
+    # Adds all of the arguments as config variables.
+    wandb.config.update(args)
+
+    return args
+
+if __name__ == "__main__":
+    # Initialize W&B.
+    wandb.init(project="FastGAN-pytorch")
+    args = parse()
 
     train(args)
