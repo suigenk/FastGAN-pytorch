@@ -6,8 +6,10 @@ from torch.utils.data.dataloader import DataLoader
 from torchvision import transforms
 from torchvision import utils as vutils
 
+import os
 import argparse
 import random
+import wandb
 from tqdm import tqdm
 
 from models import weights_init, Discriminator, Generator
@@ -65,9 +67,9 @@ def train(args):
     nbeta1 = 0.5
     use_cuda = True
     multi_gpu = True
-    dataloader_workers = 8
+    dataloader_workers = args.dataloader_workers
     current_iteration = 0
-    save_interval = 100
+    save_interval = args.save_interval
     saved_model_folder, saved_image_folder = get_dir(args)
     
     device = torch.device("cpu")
@@ -158,18 +160,26 @@ def train(args):
         for p, avg_p in zip(netG.parameters(), avg_param_G):
             avg_p.mul_(0.999).add_(0.001 * p.data)
 
-        if iteration % 100 == 0:
+        if iteration % save_interval == 0:
+            wandb.log({'loss_d': err_dr})
+            wandb.log({'loss_g': -err_g.item()})
             print("GAN: loss d: %.5f    loss g: %.5f"%(err_dr, -err_g.item()))
 
         if iteration % (save_interval*10) == 0:
             backup_para = copy_G_params(netG)
             load_params(netG, avg_param_G)
             with torch.no_grad():
-                vutils.save_image(netG(fixed_noise)[0].add(1).mul(0.5), saved_image_folder+'/%d.jpg'%iteration, nrow=4)
+                g_img_path = os.path.join(saved_image_folder, f"{iteration}.jpg")
+                vutils.save_image(netG(fixed_noise)[0].add(1).mul(0.5), g_img_path, nrow=4)
+                wandb.log({"generated_image": wandb.Image(g_img_path)})
+
+                rec_img_path = os.path.join(saved_image_folder, f"rec_{iteration}.jpg")
                 vutils.save_image( torch.cat([
                         F.interpolate(real_image, 128), 
                         rec_img_all, rec_img_small,
-                        rec_img_part]).add(1).mul(0.5), saved_image_folder+'/rec_%d.jpg'%iteration )
+                        rec_img_part]).add(1).mul(0.5), rec_img_path)
+                wandb.log({"rec_img": wandb.Image(rec_img_path)})
+
             load_params(netG, backup_para)
 
         if iteration % (save_interval*50) == 0 or iteration == total_iterations:
@@ -183,13 +193,15 @@ def train(args):
                         'opt_g': optimizerG.state_dict(),
                         'opt_d': optimizerD.state_dict()}, saved_model_folder+'/all_%d.pth'%iteration)
 
-if __name__ == "__main__":
+def parse():
     parser = argparse.ArgumentParser(description='region gan')
 
     parser.add_argument('--path', type=str, default='../lmdbs/art_landscape_1k', help='path of resource dataset, should be a folder that has one or many sub image folders inside')
     parser.add_argument('--cuda', type=int, default=0, help='index of gpu to use')
     parser.add_argument('--name', type=str, default='test1', help='experiment name')
     parser.add_argument('--iter', type=int, default=50000, help='number of iterations')
+    parser.add_argument('--dataloader_workers', type=int, default=4, help='number of data loader workers.')
+    parser.add_argument('--save_interval', type=int, default=100, help='Interval to save images.')
     parser.add_argument('--start_iter', type=int, default=0, help='the iteration to start training')
     parser.add_argument('--batch_size', type=int, default=8, help='mini batch number of images')
     parser.add_argument('--im_size', type=int, default=1024, help='image resolution')
@@ -197,6 +209,15 @@ if __name__ == "__main__":
 
 
     args = parser.parse_args()
-    print(args)
+
+    # Adds all of the arguments as config variables.
+    wandb.config.update(args)
+
+    return args
+
+if __name__ == "__main__":
+    # Initialize W&B.
+    wandb.init(project="FastGAN-pytorch")
+    args = parse()
 
     train(args)
