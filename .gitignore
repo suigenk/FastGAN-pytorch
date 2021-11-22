@@ -141,3 +141,6 @@ train_results/*
 
 # W&B
 wandb/*
+
+# Image
+*.png
